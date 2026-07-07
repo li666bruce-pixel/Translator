@@ -233,6 +233,35 @@
   }
   .status.err{ color: #E88; }
 
+  .conv-card{
+    margin-top: 14px;
+    text-align:center;
+  }
+  #convToggle{
+    width:100%;
+    background: transparent;
+    color: var(--gold);
+    border: 1.5px solid var(--gold);
+    border-radius: 12px;
+    padding: 13px;
+    font-size: 15px;
+    font-weight:700;
+    font-family:'Inter';
+    cursor:pointer;
+    transition: background 0.2s, color 0.2s;
+  }
+  #convToggle.active{
+    background: var(--gold);
+    color: var(--ink);
+    animation: pulse 1.4s ease-in-out infinite;
+  }
+  #convStatus{
+    margin-top: 8px;
+    font-size: 12.5px;
+    color: var(--muted);
+    min-height: 16px;
+  }
+
   .history{
     margin-top: 26px;
   }
@@ -317,6 +346,11 @@
     <button id="copyBtn">复制</button>
   </div>
   <div id="status" class="status"></div>
+
+  <div class="conv-card">
+    <button id="convToggle" type="button">🔁 开启自动对话模式</button>
+    <div id="convStatus"></div>
+  </div>
 
   <div class="history">
     <h2>最近翻译</h2>
@@ -407,14 +441,14 @@ async function doTranslate(){
   if(!text){
     statusEl.textContent = '请先输入内容';
     statusEl.classList.add('err');
-    return;
+    return null;
   }
   if(srcSel.value === tgtSel.value){
     statusEl.textContent = '源语言和目标语言相同';
     statusEl.classList.remove('err');
     resultText.textContent = text;
     resultText.classList.remove('placeholder');
-    return;
+    return text;
   }
   statusEl.classList.remove('err');
   statusEl.textContent = '翻译中…';
@@ -432,17 +466,19 @@ async function doTranslate(){
       statusEl.textContent = '该语言暂不支持在线翻译，请换一种语言试试';
       statusEl.classList.add('err');
       translateBtn.disabled = false;
-      return;
+      return null;
     }
     resultText.textContent = translated;
     resultText.classList.remove('placeholder');
     statusEl.textContent = '完成';
     addHistory(text, translated, srcSel.options[srcSel.selectedIndex].text, tgtSel.options[tgtSel.selectedIndex].text);
+    translateBtn.disabled = false;
+    return translated;
   }catch(err){
     statusEl.textContent = '翻译失败，请检查网络后重试';
     statusEl.classList.add('err');
-  }finally{
     translateBtn.disabled = false;
+    return null;
   }
 }
 
@@ -513,10 +549,13 @@ const micBtn = document.getElementById('micBtn');
 const micLabel = document.getElementById('micLabel');
 const speakBtn = document.getElementById('speakBtn');
 const speakLabel = document.getElementById('speakLabel');
+const convToggle = document.getElementById('convToggle');
+const convStatus = document.getElementById('convStatus');
 
 const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
 let recognizer = null;
 let isListening = false;
+let conversationMode = false;
 
 function setListening(on){
   isListening = on;
@@ -524,7 +563,37 @@ function setListening(on){
   micLabel.textContent = on ? '正在听…' : '语音输入';
 }
 
+function speakText(text, callbacks={}){
+  if(!('speechSynthesis' in window)){
+    callbacks.onEnd && callbacks.onEnd();
+    return;
+  }
+  window.speechSynthesis.cancel();
+  const utter = new SpeechSynthesisUtterance(text);
+  utter.lang = VOICE_LOCALE[tgtSel.value] || 'en-US';
+  utter.onstart = ()=>{
+    speakLabel.textContent = '朗读中…';
+    speakBtn.classList.add('listening');
+    callbacks.onStart && callbacks.onStart();
+  };
+  utter.onend = ()=>{
+    speakLabel.textContent = '朗读译文';
+    speakBtn.classList.remove('listening');
+    callbacks.onEnd && callbacks.onEnd();
+  };
+  utter.onerror = ()=>{
+    speakLabel.textContent = '朗读译文';
+    speakBtn.classList.remove('listening');
+    statusEl.textContent = '朗读失败，该语言可能没有可用的系统语音';
+    statusEl.classList.add('err');
+    callbacks.onEnd && callbacks.onEnd();
+  };
+  window.speechSynthesis.speak(utter);
+}
+
+// ---- 手动单次语音输入 ----
 micBtn.addEventListener('click', ()=>{
+  if(conversationMode) return; // 对话模式下由循环自己控制
   if(!SpeechRecognitionAPI){
     statusEl.textContent = '当前浏览器不支持语音输入，试试用 Chrome 打开';
     statusEl.classList.add('err');
@@ -579,23 +648,120 @@ speakBtn.addEventListener('click', ()=>{
     statusEl.classList.add('err');
     return;
   }
-  if(!('speechSynthesis' in window)){
-    statusEl.textContent = '当前浏览器不支持语音朗读';
+  speakText(text);
+});
+
+// ---- 自动连续对话模式 ----
+function setConvStatus(msg){
+  convStatus.textContent = msg;
+}
+
+function updateConvToggleUI(){
+  if(conversationMode){
+    convToggle.textContent = '⏹ 关闭自动对话模式';
+    convToggle.classList.add('active');
+  }else{
+    convToggle.textContent = '🔁 开启自动对话模式';
+    convToggle.classList.remove('active');
+  }
+}
+
+function stopConversationMode(errMsg){
+  conversationMode = false;
+  updateConvToggleUI();
+  if(recognizer){ try{ recognizer.stop(); }catch(e){} }
+  window.speechSynthesis.cancel();
+  setListening(false);
+  if(errMsg){
+    setConvStatus(errMsg);
+  }else{
+    setConvStatus('已关闭');
+  }
+}
+
+function conversationCycle(){
+  if(!conversationMode) return;
+
+  if(!SpeechRecognitionAPI){
+    stopConversationMode('当前浏览器不支持语音识别，试试用 Chrome 打开');
+    return;
+  }
+
+  recognizer = new SpeechRecognitionAPI();
+  recognizer.lang = VOICE_LOCALE[srcSel.value] || 'en-US';
+  recognizer.interimResults = false;
+  recognizer.maxAlternatives = 1;
+  let resultHandled = false;
+
+  recognizer.onstart = ()=>{
+    setListening(true);
+    setConvStatus('正在聆听…（对方可以开始说话）');
+  };
+
+  recognizer.onresult = (e)=>{
+    resultHandled = true;
+    const transcript = e.results[0][0].transcript;
+    srcText.value = transcript;
+    charCount.textContent = srcText.value.length;
+    setListening(false);
+    setConvStatus('翻译中…');
+
+    doTranslate().then(translated=>{
+      if(!conversationMode) return;
+      if(translated){
+        setConvStatus('朗读译文中…');
+        speakText(translated, {
+          onEnd: ()=>{ if(conversationMode) conversationCycle(); }
+        });
+      }else{
+        setConvStatus('翻译失败，2秒后重新聆听…');
+        setTimeout(()=>{ if(conversationMode) conversationCycle(); }, 2000);
+      }
+    });
+  };
+
+  recognizer.onerror = (e)=>{
+    resultHandled = true;
+    if(e.error === 'not-allowed' || e.error === 'service-not-allowed'){
+      stopConversationMode('无法访问麦克风，已退出自动对话模式（请确认已授权，并通过 https 网址打开）');
+      return;
+    }
+    if(e.error === 'no-speech'){
+      setConvStatus('没听到声音，继续聆听…');
+    }else{
+      setConvStatus('识别出错，继续重试…');
+    }
+    setTimeout(()=>{ if(conversationMode) conversationCycle(); }, 900);
+  };
+
+  recognizer.onend = ()=>{
+    setListening(false);
+    if(!resultHandled && conversationMode){
+      setTimeout(()=>{ if(conversationMode) conversationCycle(); }, 500);
+    }
+  };
+
+  try{
+    recognizer.start();
+  }catch(err){
+    if(conversationMode) setTimeout(conversationCycle, 800);
+  }
+}
+
+convToggle.addEventListener('click', ()=>{
+  if(conversationMode){
+    stopConversationMode();
+    return;
+  }
+  if(!SpeechRecognitionAPI){
+    statusEl.textContent = '当前浏览器不支持语音识别，试试用 Chrome 打开';
     statusEl.classList.add('err');
     return;
   }
-  window.speechSynthesis.cancel();
-  const utter = new SpeechSynthesisUtterance(text);
-  utter.lang = VOICE_LOCALE[tgtSel.value] || 'en-US';
-  utter.onstart = ()=>{ speakLabel.textContent = '朗读中…'; speakBtn.classList.add('listening'); };
-  utter.onend = ()=>{ speakLabel.textContent = '朗读译文'; speakBtn.classList.remove('listening'); };
-  utter.onerror = ()=>{
-    speakLabel.textContent = '朗读译文';
-    speakBtn.classList.remove('listening');
-    statusEl.textContent = '朗读失败，该语言可能没有可用的系统语音';
-    statusEl.classList.add('err');
-  };
-  window.speechSynthesis.speak(utter);
+  conversationMode = true;
+  updateConvToggleUI();
+  setConvStatus('启动中…');
+  conversationCycle();
 });
 </script>
 </body>
