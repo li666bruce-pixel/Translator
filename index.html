@@ -582,7 +582,7 @@ async function doTranslate(){
   translateBtn.disabled = true;
 
   const langpair = `${srcSel.value.split('-')[0]}|${tgtSel.value.split('-')[0]}`;
-  const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${langpair}`;
+  const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${langpair}&de=${encodeURIComponent('li666bruce@gmail.com')}`;
 
   try{
     const res = await fetch(url);
