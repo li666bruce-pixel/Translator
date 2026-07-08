@@ -192,6 +192,44 @@
   }
   #resultText.placeholder{ color:#56687D; }
 
+  .voice-settings{
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid var(--line);
+    display:flex;
+    flex-direction:column;
+    gap: 8px;
+  }
+  .vs-row{
+    display:flex;
+    align-items:center;
+    gap: 8px;
+  }
+  .vs-row label{
+    font-size: 11.5px;
+    color: var(--muted);
+    width: 44px;
+    flex-shrink:0;
+  }
+  .vs-row select{
+    flex:1;
+    min-width:0;
+    font-size: 12.5px;
+    padding: 6px 26px 6px 10px;
+  }
+  .vs-row input[type="range"]{
+    flex:1;
+    accent-color: var(--jade);
+    height: 4px;
+  }
+  #rateValue{
+    font-size: 11.5px;
+    color: var(--muted);
+    width: 36px;
+    text-align:right;
+    flex-shrink:0;
+  }
+
   .actions{
     display:flex;
     gap:10px;
@@ -261,6 +299,52 @@
     color: var(--muted);
     min-height: 16px;
   }
+  .alt-toggle{
+    display:flex;
+    align-items:center;
+    gap: 8px;
+    margin-top: 12px;
+    font-size: 12px;
+    color: var(--muted);
+    text-align:left;
+  }
+  .alt-toggle select{
+    flex:1;
+    font-size: 12.5px;
+    padding: 7px 26px 7px 10px;
+  }
+  .kw-row{
+    display:flex;
+    align-items:center;
+    gap: 8px;
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .kw-row input[type="text"]{
+    flex:1;
+    background: var(--panel-hi);
+    border: 1px solid var(--line);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-size: 12.5px;
+    font-family:'Inter';
+  }
+  #reclaimBtn{
+    width:100%;
+    margin-top: 12px;
+    background: var(--jade);
+    color: var(--ink);
+    border: none;
+    border-radius: 12px;
+    padding: 13px;
+    font-size: 15px;
+    font-weight:700;
+    font-family:'Inter';
+    cursor:pointer;
+  }
+  #reclaimBtn:active{ transform: scale(0.98); }
 
   .history{
     margin-top: 26px;
@@ -339,6 +423,17 @@
         <span id="speakLabel">朗读译文</span>
       </button>
     </div>
+    <div class="voice-settings">
+      <div class="vs-row">
+        <label for="voiceSelect">发音人</label>
+        <select id="voiceSelect"><option value="">系统默认</option></select>
+      </div>
+      <div class="vs-row">
+        <label for="rateSlider">语速</label>
+        <input id="rateSlider" type="range" min="0.6" max="1.3" step="0.05" value="0.95">
+        <span id="rateValue">0.95x</span>
+      </div>
+    </div>
   </div>
 
   <div class="actions">
@@ -349,6 +444,19 @@
 
   <div class="conv-card">
     <button id="convToggle" type="button">🔁 开启自动对话模式</button>
+    <div class="alt-toggle">
+      <label for="altModeSelect" style="width:76px; flex-shrink:0;">切换方式</label>
+      <select id="altModeSelect">
+        <option value="over" selected>我说口令才切走（推荐）</option>
+        <option value="everyTurn">每轮都自动切换</option>
+        <option value="none">不自动切换（手动点交换）</option>
+      </select>
+    </div>
+    <div class="kw-row" id="kwRow">
+      <label for="kwInput" style="width:76px; flex-shrink:0;">切换口令</label>
+      <input type="text" id="kwInput" value="结束" maxlength="20">
+    </div>
+    <button id="reclaimBtn" type="button" style="display:none;">🙋 轮到我说（立即切回我的语言）</button>
     <div id="convStatus"></div>
   </div>
 
@@ -422,18 +530,25 @@ srcText.addEventListener('input', ()=>{
   charCount.textContent = srcText.value.length;
 });
 
-swapBtn.addEventListener('click', ()=>{
-  swapBtn.classList.add('spin');
-  setTimeout(()=>swapBtn.classList.remove('spin'), 350);
+function swapLanguages(clearResult=true){
   const a = srcSel.value, b = tgtSel.value;
   srcSel.value = b; tgtSel.value = a;
-  const currentResult = resultText.classList.contains('placeholder') ? '' : resultText.textContent;
-  if(currentResult){
-    srcText.value = currentResult;
-    charCount.textContent = srcText.value.length;
+  refreshVoiceList();
+  if(clearResult){
+    const currentResult = resultText.classList.contains('placeholder') ? '' : resultText.textContent;
+    if(currentResult){
+      srcText.value = currentResult;
+      charCount.textContent = srcText.value.length;
+    }
     resultText.textContent = '译文会显示在这里…';
     resultText.classList.add('placeholder');
   }
+}
+
+swapBtn.addEventListener('click', ()=>{
+  swapBtn.classList.add('spin');
+  setTimeout(()=>swapBtn.classList.remove('spin'), 350);
+  swapLanguages(true);
 });
 
 async function doTranslate(){
@@ -551,11 +666,66 @@ const speakBtn = document.getElementById('speakBtn');
 const speakLabel = document.getElementById('speakLabel');
 const convToggle = document.getElementById('convToggle');
 const convStatus = document.getElementById('convStatus');
+const altModeSelect = document.getElementById('altModeSelect');
+const kwInput = document.getElementById('kwInput');
+const kwRow = document.getElementById('kwRow');
+
+function updateKwRowVisibility(){
+  kwRow.style.display = (altModeSelect.value === 'over') ? 'flex' : 'none';
+}
+altModeSelect.addEventListener('change', updateKwRowVisibility);
+updateKwRowVisibility();
+const voiceSelect = document.getElementById('voiceSelect');
+const rateSlider = document.getElementById('rateSlider');
+const rateValue = document.getElementById('rateValue');
+
+let availableVoices = [];
+
+function refreshVoiceList(){
+  if(!('speechSynthesis' in window)) return;
+  availableVoices = window.speechSynthesis.getVoices();
+  const targetLang = (VOICE_LOCALE[tgtSel.value] || 'en-US').split('-')[0];
+  const matches = availableVoices.filter(v => v.lang && v.lang.toLowerCase().startsWith(targetLang));
+
+  const prevSelected = voiceSelect.value;
+  voiceSelect.innerHTML = '<option value="">系统默认</option>';
+  matches.forEach(v=>{
+    const label = `${v.name}${v.localService ? '（本地）' : '（网络，通常更清晰）'}`;
+    voiceSelect.appendChild(new Option(label, v.voiceURI));
+  });
+  // 尝试保留之前的选择；否则若有网络语音，默认优先选它
+  if(matches.some(v => v.voiceURI === prevSelected)){
+    voiceSelect.value = prevSelected;
+  }else{
+    const networkVoice = matches.find(v => !v.localService);
+    voiceSelect.value = networkVoice ? networkVoice.voiceURI : '';
+  }
+
+  if(matches.length === 0){
+    const opt = new Option('（该语言暂无系统语音，将使用默认音色）', '');
+    opt.disabled = true;
+    voiceSelect.appendChild(opt);
+  }
+}
+
+if('speechSynthesis' in window){
+  window.speechSynthesis.onvoiceschanged = refreshVoiceList;
+  refreshVoiceList();
+}
+tgtSel.addEventListener('change', refreshVoiceList);
+
+rateSlider.addEventListener('input', ()=>{
+  rateValue.textContent = parseFloat(rateSlider.value).toFixed(2) + 'x';
+});
 
 const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
 let recognizer = null;
 let isListening = false;
 let conversationMode = false;
+let homeSrc = null;
+let homeTgt = null;
+let cycleToken = 0;
+const reclaimBtn = document.getElementById('reclaimBtn');
 
 function setListening(on){
   isListening = on;
@@ -571,6 +741,10 @@ function speakText(text, callbacks={}){
   window.speechSynthesis.cancel();
   const utter = new SpeechSynthesisUtterance(text);
   utter.lang = VOICE_LOCALE[tgtSel.value] || 'en-US';
+  utter.rate = parseFloat(rateSlider.value) || 0.95;
+  utter.volume = 1;
+  const chosenVoice = availableVoices.find(v => v.voiceURI === voiceSelect.value);
+  if(chosenVoice) utter.voice = chosenVoice;
   utter.onstart = ()=>{
     speakLabel.textContent = '朗读中…';
     speakBtn.classList.add('listening');
@@ -668,10 +842,13 @@ function updateConvToggleUI(){
 
 function stopConversationMode(errMsg){
   conversationMode = false;
+  cycleToken++;
   updateConvToggleUI();
-  if(recognizer){ try{ recognizer.stop(); }catch(e){} }
+  if(recognizer){ try{ recognizer.onresult=null; recognizer.onerror=null; recognizer.onend=null; recognizer.stop(); }catch(e){} }
   window.speechSynthesis.cancel();
   setListening(false);
+  reclaimBtn.style.display = 'none';
+  homeSrc = null; homeTgt = null;
   if(errMsg){
     setConvStatus(errMsg);
   }else{
@@ -687,6 +864,8 @@ function conversationCycle(){
     return;
   }
 
+  const myToken = cycleToken;
+
   recognizer = new SpeechRecognitionAPI();
   recognizer.lang = VOICE_LOCALE[srcSel.value] || 'en-US';
   recognizer.interimResults = false;
@@ -694,34 +873,74 @@ function conversationCycle(){
   let resultHandled = false;
 
   recognizer.onstart = ()=>{
+    if(cycleToken !== myToken) return;
     setListening(true);
-    setConvStatus('正在聆听…（对方可以开始说话）');
+    const s = srcSel.options[srcSel.selectedIndex].text;
+    const t = tgtSel.options[tgtSel.selectedIndex].text;
+    const homeTag = (srcSel.value === homeSrc && tgtSel.value === homeTgt) ? '（我的语言）' : '（对方语言）';
+    setConvStatus(`正在聆听「${s}」${homeTag}…（将朗读为「${t}」）`);
   };
 
   recognizer.onresult = (e)=>{
     resultHandled = true;
-    const transcript = e.results[0][0].transcript;
-    srcText.value = transcript;
-    charCount.textContent = srcText.value.length;
+    if(cycleToken !== myToken) return;
+    const rawTranscript = e.results[0][0].transcript;
+    const mode = altModeSelect.value;
+    const isHome = (srcSel.value === homeSrc && tgtSel.value === homeTgt);
+    let cleaned = rawTranscript.trim();
+    let keywordDetected = false;
+
+    if(mode === 'over' && isHome){
+      const kw = (kwInput.value || '结束').trim();
+      if(kw){
+        const escaped = kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const re = new RegExp('[\\s,，。.!！?？]*' + escaped + '[\\s.!！?？]*$', 'i');
+        if(re.test(cleaned)){
+          keywordDetected = true;
+          cleaned = cleaned.replace(re, '').trim();
+        }
+      }
+    }
+
     setListening(false);
+
+    // 只说了切换口令、没有别的内容：直接切换方向，不用翻译
+    if(mode === 'over' && isHome && keywordDetected && cleaned === ''){
+      setConvStatus('收到切换口令，正在切换方向…');
+      swapLanguages(false);
+      conversationCycle();
+      return;
+    }
+
+    srcText.value = cleaned;
+    charCount.textContent = srcText.value.length;
     setConvStatus('翻译中…');
 
     doTranslate().then(translated=>{
-      if(!conversationMode) return;
+      if(!conversationMode || cycleToken !== myToken) return;
       if(translated){
         setConvStatus('朗读译文中…');
         speakText(translated, {
-          onEnd: ()=>{ if(conversationMode) conversationCycle(); }
+          onEnd: ()=>{
+            if(!conversationMode || cycleToken !== myToken) return;
+            // everyTurn 模式：始终盲目交替。
+            // over 模式：只有在“主场方向”且检测到口令才切换；
+            // 切到对方语言后不会自动切回，需要手动点“轮到我说”。
+            const shouldSwap = (mode === 'everyTurn') || (mode === 'over' && isHome && keywordDetected);
+            if(shouldSwap) swapLanguages(false);
+            conversationCycle();
+          }
         });
       }else{
         setConvStatus('翻译失败，2秒后重新聆听…');
-        setTimeout(()=>{ if(conversationMode) conversationCycle(); }, 2000);
+        setTimeout(()=>{ if(conversationMode && cycleToken === myToken) conversationCycle(); }, 2000);
       }
     });
   };
 
   recognizer.onerror = (e)=>{
     resultHandled = true;
+    if(cycleToken !== myToken) return;
     if(e.error === 'not-allowed' || e.error === 'service-not-allowed'){
       stopConversationMode('无法访问麦克风，已退出自动对话模式（请确认已授权，并通过 https 网址打开）');
       return;
@@ -731,20 +950,21 @@ function conversationCycle(){
     }else{
       setConvStatus('识别出错，继续重试…');
     }
-    setTimeout(()=>{ if(conversationMode) conversationCycle(); }, 900);
+    setTimeout(()=>{ if(conversationMode && cycleToken === myToken) conversationCycle(); }, 900);
   };
 
   recognizer.onend = ()=>{
+    if(cycleToken !== myToken) return;
     setListening(false);
     if(!resultHandled && conversationMode){
-      setTimeout(()=>{ if(conversationMode) conversationCycle(); }, 500);
+      setTimeout(()=>{ if(conversationMode && cycleToken === myToken) conversationCycle(); }, 500);
     }
   };
 
   try{
     recognizer.start();
   }catch(err){
-    if(conversationMode) setTimeout(conversationCycle, 800);
+    if(conversationMode && cycleToken === myToken) setTimeout(conversationCycle, 800);
   }
 }
 
@@ -759,8 +979,24 @@ convToggle.addEventListener('click', ()=>{
     return;
   }
   conversationMode = true;
+  homeSrc = srcSel.value;
+  homeTgt = tgtSel.value;
+  reclaimBtn.style.display = 'block';
   updateConvToggleUI();
   setConvStatus('启动中…');
+  conversationCycle();
+});
+
+reclaimBtn.addEventListener('click', ()=>{
+  if(!conversationMode || homeSrc === null) return;
+  cycleToken++; // 让所有旧的识别/朗读回调失效
+  if(recognizer){ try{ recognizer.onresult=null; recognizer.onerror=null; recognizer.onend=null; recognizer.stop(); }catch(e){} }
+  window.speechSynthesis.cancel();
+  srcSel.value = homeSrc;
+  tgtSel.value = homeTgt;
+  refreshVoiceList();
+  setListening(false);
+  setConvStatus('已切回我的语言，重新聆听…');
   conversationCycle();
 });
 </script>
