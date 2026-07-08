@@ -229,6 +229,17 @@
     text-align:right;
     flex-shrink:0;
   }
+  #refreshVoicesBtn{
+    flex-shrink:0;
+    background: var(--panel-hi);
+    border: 1px solid var(--line);
+    color: var(--muted);
+    border-radius: 8px;
+    padding: 6px 9px;
+    font-size: 13px;
+    cursor:pointer;
+  }
+  #refreshVoicesBtn:active{ color: var(--jade); border-color: var(--jade); }
 
   .actions{
     display:flex;
@@ -427,6 +438,7 @@
       <div class="vs-row">
         <label for="voiceSelect">发音人</label>
         <select id="voiceSelect"><option value="">系统默认</option></select>
+        <button id="refreshVoicesBtn" type="button" title="重新检测系统语音">🔄</button>
       </div>
       <div class="vs-row">
         <label for="rateSlider">语速</label>
@@ -678,6 +690,7 @@ updateKwRowVisibility();
 const voiceSelect = document.getElementById('voiceSelect');
 const rateSlider = document.getElementById('rateSlider');
 const rateValue = document.getElementById('rateValue');
+const refreshVoicesBtn = document.getElementById('refreshVoicesBtn');
 
 let availableVoices = [];
 
@@ -702,17 +715,38 @@ function refreshVoiceList(){
   }
 
   if(matches.length === 0){
-    const opt = new Option('（该语言暂无系统语音，将使用默认音色）', '');
+    let msg;
+    if(availableVoices.length === 0){
+      msg = '（系统暂未返回任何语音，点右边 🔄 重试，或确认手机已启用文字转语音引擎）';
+    }else{
+      msg = `（该语言暂无系统语音；系统共检测到 ${availableVoices.length} 个其他语音，需要去手机设置里下载这个语言的语音包）`;
+    }
+    const opt = new Option(msg, '');
     opt.disabled = true;
     voiceSelect.appendChild(opt);
   }
+  return availableVoices.length;
 }
 
+// 有些安卓浏览器 onvoiceschanged 不触发，或者首次调用 getVoices() 返回空数组，
+// 需要轮询重试几次
 if('speechSynthesis' in window){
   window.speechSynthesis.onvoiceschanged = refreshVoiceList;
-  refreshVoiceList();
+  let tries = 0;
+  const poll = setInterval(()=>{
+    tries++;
+    const count = refreshVoiceList();
+    if(count > 0 || tries >= 8){ clearInterval(poll); }
+  }, 400);
 }
 tgtSel.addEventListener('change', refreshVoiceList);
+refreshVoicesBtn.addEventListener('click', ()=>{
+  refreshVoicesBtn.textContent = '…';
+  setTimeout(()=>{
+    refreshVoiceList();
+    refreshVoicesBtn.textContent = '🔄';
+  }, 150);
+});
 
 rateSlider.addEventListener('input', ()=>{
   rateValue.textContent = parseFloat(rateSlider.value).toFixed(2) + 'x';
