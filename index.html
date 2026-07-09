@@ -240,6 +240,19 @@
     cursor:pointer;
   }
   #refreshVoicesBtn:active{ color: var(--jade); border-color: var(--jade); }
+  #previewVoiceBtn{
+    flex-shrink:0;
+    background: var(--panel-hi);
+    border: 1px solid var(--line);
+    color: var(--muted);
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-size: 11.5px;
+    font-family:'Inter';
+    cursor:pointer;
+    white-space:nowrap;
+  }
+  #previewVoiceBtn:active{ color: var(--jade); border-color: var(--jade); }
 
   .actions{
     display:flex;
@@ -357,6 +370,56 @@
   }
   #reclaimBtn:active{ transform: scale(0.98); }
 
+  .diag-card{
+    margin-top: 14px;
+  }
+  #micCheckBtn{
+    width:100%;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    color: var(--text);
+    border-radius: 12px;
+    padding: 12px;
+    font-size: 14px;
+    font-weight:600;
+    font-family:'Inter';
+    cursor:pointer;
+  }
+  #micCheckBtn:active{ border-color: var(--jade); color: var(--jade); }
+  #micCheckStatus{
+    margin-top: 8px;
+    font-size: 12.5px;
+    color: var(--muted);
+    text-align:center;
+    min-height: 16px;
+  }
+  #micCheckStatus.ok{ color: var(--jade); }
+  #micCheckStatus.bad{ color: #E88; }
+  .help-details{
+    margin-top: 12px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 10px 14px;
+  }
+  .help-details summary{
+    font-size: 13px;
+    color: var(--muted);
+    cursor:pointer;
+    list-style: none;
+  }
+  .help-details summary::-webkit-details-marker{ display:none; }
+  .help-details summary::before{ content: '▸ '; color: var(--jade); }
+  .help-details[open] summary::before{ content: '▾ '; }
+  .help-body{
+    margin-top: 10px;
+    font-size: 12.5px;
+    color: var(--muted);
+    line-height:1.6;
+  }
+  .help-body p{ margin: 0 0 10px; }
+  .help-body p:last-child{ margin-bottom:0; }
+  .help-body b, .help-body strong{ color: var(--text); }
+
   .history{
     margin-top: 26px;
   }
@@ -439,6 +502,7 @@
         <label for="voiceSelect">发音人</label>
         <select id="voiceSelect"><option value="">系统默认</option></select>
         <button id="refreshVoicesBtn" type="button" title="重新检测系统语音">🔄</button>
+        <button id="previewVoiceBtn" type="button" title="试听这个发音人">🔊试听</button>
       </div>
       <div class="vs-row">
         <label for="rateSlider">语速</label>
@@ -470,6 +534,22 @@
     </div>
     <button id="reclaimBtn" type="button" style="display:none;">🙋 轮到我说（立即切回我的语言）</button>
     <div id="convStatus"></div>
+  </div>
+
+  <div class="diag-card">
+    <button id="micCheckBtn" type="button">🎙️ 麦克风权限自检</button>
+    <div id="micCheckStatus"></div>
+    <details class="help-details">
+      <summary>手机上语音功能用不了？点这里看疑难解答</summary>
+      <div class="help-body">
+        <p><strong>先看能不能用：</strong>语音识别（听你说话）目前只有 <b>Chrome（安卓）</b>和 <b>Safari（iPhone）</b>支持得比较好。小米、华为、OPPO/vivo 自带浏览器、UC浏览器、QQ浏览器等大多不支持，换成上面两个浏览器打开试试。朗读（读出译文）兼容性好很多，大部分浏览器都能用。</p>
+        <p><strong>权限要开两层：</strong></p>
+        <p>① 网页弹出的"允许访问麦克风"要点允许；<br>
+        ② 手机系统里浏览器这个 App 本身也要有麦克风权限——安卓：设置→应用管理→找到浏览器（如Chrome）→权限→麦克风→允许；iPhone：设置→隐私与安全性→麦克风→找到Safari打开。</p>
+        <p><strong>国产手机常见的第三层拦截：</strong>小米(MIUI/HyperOS)、华为、OPPO/vivo 系统里还有独立的"隐私/权限管理"App，即使浏览器权限都开了，这层也可能悄悄拦着，需要额外去那个专属设置里放行（一般在"设置→隐私"或"手机管家→权限管理"里能找到）。</p>
+        <p><strong>还是不行：</strong>确认网址是 https 开头（不是直接打开的本地文件）；换个浏览器试试；把上面"麦克风权限自检"的报错信息截图，发给我继续排查。</p>
+      </div>
+    </details>
   </div>
 
   <div class="history">
@@ -748,11 +828,68 @@ refreshVoicesBtn.addEventListener('click', ()=>{
   }, 150);
 });
 
+const previewVoiceBtn = document.getElementById('previewVoiceBtn');
+const PREVIEW_PHRASES = {
+  zh: '你好，这是试听效果', en: 'Hello, this is a voice preview',
+  hi: 'नमस्ते, यह आवाज़ का नमूना है', gu: 'નમસ્તે, આ અવાજનો નમૂનો છે',
+  mr: 'नमस्कार, हा आवाजाचा नमुना आहे', bn: 'নমস্কার, এটি একটি ভয়েস প্রিভিউ',
+  te: 'నమస్కారం, ఇది వాయిస్ ప్రివ్యూ', ta: 'வணக்கம், இது குரல் மாதிரி',
+  kn: 'ನಮಸ್ಕಾರ, ಇದು ಧ್ವನಿ ಮಾದರಿ', ml: 'നമസ്കാരം, ഇത് ശബ്ദ സാമ്പിൾ ആണ്',
+  pa: 'ਸਤ ਸ੍ਰੀ ਅਕਾਲ, ਇਹ ਆਵਾਜ਼ ਦਾ ਨਮੂਨਾ ਹੈ', ur: 'ہیلو، یہ آواز کا نمونہ ہے'
+};
+previewVoiceBtn.addEventListener('click', ()=>{
+  const langCode = (VOICE_LOCALE[tgtSel.value] || 'en-US').split('-')[0];
+  const phrase = PREVIEW_PHRASES[langCode] || `${tgtSel.options[tgtSel.selectedIndex].text} voice preview`;
+  previewVoiceBtn.textContent = '播放中…';
+  speakText(phrase, {
+    onEnd: ()=>{ previewVoiceBtn.textContent = '🔊试听'; }
+  });
+});
+
 rateSlider.addEventListener('input', ()=>{
   rateValue.textContent = parseFloat(rateSlider.value).toFixed(2) + 'x';
 });
 
 const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+const micCheckBtn = document.getElementById('micCheckBtn');
+const micCheckStatus = document.getElementById('micCheckStatus');
+
+micCheckBtn.addEventListener('click', async ()=>{
+  micCheckStatus.classList.remove('ok','bad');
+  micCheckStatus.textContent = '检测中…';
+
+  if(location.protocol !== 'https:' && location.hostname !== 'localhost'){
+    micCheckStatus.textContent = '当前不是 https 网址，浏览器会直接拒绝麦克风访问，需要先把文件部署到 https 网站上';
+    micCheckStatus.classList.add('bad');
+    return;
+  }
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    micCheckStatus.textContent = '当前浏览器不支持麦克风接口，换成 Chrome（安卓）或 Safari（iPhone）试试';
+    micCheckStatus.classList.add('bad');
+    return;
+  }
+
+  try{
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    stream.getTracks().forEach(t => t.stop());
+    micCheckStatus.textContent = '✅ 麦克风权限正常，可以放心使用语音输入';
+    micCheckStatus.classList.add('ok');
+  }catch(err){
+    let msg = `麦克风访问失败（${err.name}）`;
+    if(err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError'){
+      msg = '被拒绝访问麦克风：请在浏览器地址栏旁的权限设置里把麦克风改成"允许"，同时确认手机系统里也给了这个浏览器麦克风权限（部分手机还有独立的隐私管理App，见下方疑难解答）';
+    }else if(err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError'){
+      msg = '没有检测到麦克风设备，请确认手机麦克风硬件正常、没被其他App占用';
+    }else if(err.name === 'NotReadableError' || err.name === 'TrackStartError'){
+      msg = '麦克风被其他程序占用，关闭其他正在用麦克风的App后重试';
+    }else if(err.name === 'SecurityError'){
+      msg = '安全限制导致无法访问麦克风，请确认网址是 https 开头';
+    }
+    micCheckStatus.textContent = msg;
+    micCheckStatus.classList.add('bad');
+  }
+});
 let recognizer = null;
 let isListening = false;
 let conversationMode = false;
